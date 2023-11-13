@@ -20,7 +20,6 @@ SRCS		= ft_traceroute.c
 NAME		= ft_traceroute
 OBJS_DIR	= objs/
 PROJECT_H	= ft_traceroute.h
-PROJECT_H_PATH = include
 OBJS		= $(SRCS:.c=.o)
 OBJECTS_PREFIXED = $(addprefix $(OBJS_DIR), $(OBJS))
 CC			= gcc
