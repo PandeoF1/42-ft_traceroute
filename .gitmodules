@@ -1,0 +1,6 @@
+[submodule "libft"]
+	path = libft
+	url = https://github.com/PandeoF1/42-libft
+[submodule "libargparse"]
+	path = libargparse
+	url = https://github.com/Tlafay1/libargparse

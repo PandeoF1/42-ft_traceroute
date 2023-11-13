@@ -1,0 +1,5 @@
+obj
+objs
+.o
+*.a
+ft_traceroute
