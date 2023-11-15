@@ -3,9 +3,9 @@
 #define MAX_HOPS 12 // 30
 #define PACKET_SIZE 68
 
-unsigned short checksum(void* b, int len)
+unsigned short checksum(void *b, int len)
 {
-	unsigned short* buf = b;
+	unsigned short *buf = b;
 	unsigned int sum = 0;
 	unsigned short result;
 
@@ -13,7 +13,7 @@ unsigned short checksum(void* b, int len)
 		sum += *buf++;
 
 	if (len == 1)
-		sum += *(unsigned char*)buf;
+		sum += *(unsigned char *)buf;
 
 	sum = (sum >> 16) + (sum & 0xFFFF);
 	sum += (sum >> 16);
@@ -22,7 +22,7 @@ unsigned short checksum(void* b, int len)
 	return result;
 }
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
 	if (argc != 2)
 	{
@@ -30,75 +30,79 @@ int main(int argc, char** argv)
 		return (1);
 	}
 
-	char* destination = argv[1];
+	char *destination = argv[1];
 	struct sockaddr_in dest_addr;
+	ft_memset(&dest_addr, 0, sizeof(dest_addr));
+	dest_addr.sin_family = AF_INET;
+	dest_addr.sin_port = htons(33434);
 	int sockfd;
 	int ttl = 0;
 
 	// Hostname to IPv4
-	struct hostent* host;
-	if ((host = gethostbyname(destination)) == NULL) {
+	struct hostent *host;
+	if ((host = gethostbyname(destination)) == NULL)
+	{
 		perror("gethostbyname");
 		exit(EXIT_FAILURE);
 	}
 
-	ft_memset(&dest_addr, 0, sizeof(dest_addr));
-	dest_addr.sin_family = AF_INET;
 	ft_memcpy(&(dest_addr.sin_addr.s_addr), host->h_addr, host->h_length);
 
 	inet_pton(AF_INET, destination, &(dest_addr.sin_addr));
 
 	// Create a raw socket for UDP
-	if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_UDP)) == -1) {
+	if ((sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+	{
 		perror("socket");
 		exit(EXIT_FAILURE);
 	}
 
 	printf("ft_traceroute to %s (%s), %d hops max, %d byte packets\n", destination, inet_ntoa(dest_addr.sin_addr), MAX_HOPS, PACKET_SIZE - 8);
 
-	while (ttl++ < MAX_HOPS) {
+	while (ttl++ < MAX_HOPS)
+	{
 
 		// Set the TTL for the socket
 		setsockopt(sockfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(int));
 
 		// Create the UDP header
-		struct udphdr udp_header;
-		udp_header.source = htons(33434);
-		udp_header.dest = htons(33434);
-		udp_header.len = htons(PACKET_SIZE);
-		udp_header.check = 0;
-
 
 		// Create the IP header
-		struct iphdr ip_header;
-
+		// struct iphdr ip_header;
 
 		// Send the packet
 		struct timeval start[3], end[3];
-		for (int i = 0; i < 3; i++) {
+		for (int i = 0; i < 3; i++)
+		{
 			// Get the current time
 			gettimeofday(&start[i], NULL);
 
 			// Send the packet
-			if (sendto(sockfd, &udp_header, PACKET_SIZE, 0, (struct sockaddr*)&dest_addr, sizeof(struct sockaddr)) == -1) {
+			char packet[PACKET_SIZE / 2 - 2];
+			ft_memset(packet, 0, PACKET_SIZE / 2 - 2);
+			if (sendto(sockfd, packet, sizeof(packet), 0, (struct sockaddr*)&dest_addr, sizeof(struct sockaddr)) == -1)
+			{
 				perror("sendto");
 				exit(EXIT_FAILURE);
 			}
+			printf("Sent packet of size %ld\n", sizeof(packet));
 
 			// Receive the packet
 			struct sockaddr_in recv_addr;
 			socklen_t recv_addr_len = sizeof(struct sockaddr_in);
 			char recv_buf[PACKET_SIZE];
-			if (recvfrom(sockfd, recv_buf, PACKET_SIZE, 0, (struct sockaddr*)&recv_addr, &recv_addr_len) == -1) {
+			ft_memset(recv_buf, 0, PACKET_SIZE);
+			printf("Waiting for packet...\n");
+			if (recvfrom(sockfd, recv_buf, sizeof(recv_buf), 0, (struct sockaddr*)&recv_addr, &recv_addr_len) == -1)
+			{
 				perror("recvfrom");
 				exit(EXIT_FAILURE);
 			}
+			printf("Received packet of size %ld\n", sizeof(recv_buf));
 			// Check if timeout
-			
 
 			// Get the current time
 			gettimeofday(&end[i], NULL);
-
 		}
 
 		// Print the information about the hop
