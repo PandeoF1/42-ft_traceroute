@@ -51,10 +51,10 @@ int main(int argc, char **argv)
 			perror("socket");
 			exit(EXIT_FAILURE);
 		}
-
 	}
-	else {
-				if (setsockopt(icmpfd, IPPROTO_IP, IP_HDRINCL, &(int){1}, sizeof(int)) < 0)
+	else
+	{
+		if (setsockopt(icmpfd, IPPROTO_IP, IP_HDRINCL, &(int){1}, sizeof(int)) < 0)
 		{
 			perror("setsockopt");
 			exit(EXIT_FAILURE);
@@ -65,7 +65,6 @@ int main(int argc, char **argv)
 
 	while (ttl++ < MAX_HOPS)
 	{
-
 		// Set the TTL for the socket
 		if (setsockopt(udpfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(int)))
 		{
@@ -128,9 +127,7 @@ int main(int argc, char **argv)
 					if (recv_len == -1)
 					{
 						if (errno == EHOSTUNREACH)
-						{
 							printf(" * (no response)");
-						}
 						else
 						{
 							perror("recvfrom");
