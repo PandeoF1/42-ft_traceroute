@@ -76,7 +76,8 @@ int main(int argc, char **argv)
 			gettimeofday(&start[i], NULL);
 
 			// Send the packet
-			char data[] = "SUPERMAN";
+			char data[PACKET_SIZE];
+			ft_memset(data, 0, sizeof(data));
 			dest_addr.sin_port = htons(33434 + i);
 			if (sendto(udpfd, data, sizeof(data), 0, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr)) == -1)
 			{
@@ -136,14 +137,14 @@ int main(int argc, char **argv)
 					else
 						host_name = inet_ntoa(recv_addr.sin_addr);
 					if (last_addr.sin_addr.s_addr == recv_addr.sin_addr.s_addr)
-						printf("%.3f ms ", (end[i].tv_sec - start[i].tv_sec) * 1000.0 + (end[i].tv_usec - start[i].tv_usec) / 1000.0);
+						printf(" %.3f ms ", (end[i].tv_sec - start[i].tv_sec) * 1000.0 + (end[i].tv_usec - start[i].tv_usec) / 1000.0);
 					else
-						printf("%s (%s)  %.3f ms ", host_name, inet_ntoa(recv_addr.sin_addr), (end[i].tv_sec - start[i].tv_sec) * 1000.0 + (end[i].tv_usec - start[i].tv_usec) / 1000.0);
+						printf(" %s (%s)  %.3f ms ", host_name, inet_ntoa(recv_addr.sin_addr), (end[i].tv_sec - start[i].tv_sec) * 1000.0 + (end[i].tv_usec - start[i].tv_usec) / 1000.0);
 					last_addr = recv_addr;
 				}
 			}
 			else
-				printf("* ");
+				printf(" * ");
 		}
 		printf("\n");
 		if (last_addr.sin_addr.s_addr == dest_addr.sin_addr.s_addr)
