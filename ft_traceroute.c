@@ -10,6 +10,11 @@ int main(int argc, char **argv)
 		printf("Usage: %s <hostname>\n", argv[0]);
 		return (1);
 	}
+	if (getuid() != 0)
+	{
+		printf("ft_traceroute: Lacking privilege for icmp socket.\n");
+		return (1);
+	}
 
 	char *destination = argv[1];
 	struct sockaddr_in dest_addr;
@@ -46,12 +51,14 @@ int main(int argc, char **argv)
 			perror("socket");
 			exit(EXIT_FAILURE);
 		}
-	}
 
-	if (setsockopt(icmpfd, IPPROTO_IP, IP_HDRINCL, &(int){1}, sizeof(int)) < 0)
-	{
-		perror("setsockopt");
-		exit(EXIT_FAILURE);
+	}
+	else {
+				if (setsockopt(icmpfd, IPPROTO_IP, IP_HDRINCL, &(int){1}, sizeof(int)) < 0)
+		{
+			perror("setsockopt");
+			exit(EXIT_FAILURE);
+		}
 	}
 
 	printf("ft_traceroute to %s (%s), %d hops max, %d byte packets\n", destination, inet_ntoa(dest_addr.sin_addr), MAX_HOPS, PACKET_SIZE - 8);
@@ -70,6 +77,7 @@ int main(int argc, char **argv)
 		printf("%c%d ", (ttl < 10) ? ' ' : '\0', ttl);
 		struct timeval start[3], end[3];
 		struct sockaddr_in last_addr;
+		ft_memset(&last_addr, 0, sizeof(last_addr));
 		for (int i = 0; i < 3; i++)
 		{
 			// Get the current time
