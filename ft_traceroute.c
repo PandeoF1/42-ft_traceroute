@@ -63,7 +63,7 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	if ((icmpfd = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0) // Create the ICMP socket
-{
+	{
 		perror("socket");
 		exit(EXIT_FAILURE);
 	}
