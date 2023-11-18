@@ -1,26 +1,7 @@
 #include "ft_traceroute.h"
 
-#define MAX_HOPS 12 // 30
+#define MAX_HOPS 30
 #define PACKET_SIZE 68
-
-unsigned short checksum(void *b, int len)
-{
-	unsigned short *buf = b;
-	unsigned int sum = 0;
-	unsigned short result;
-
-	for (sum = 0; len > 1; len -= 2)
-		sum += *buf++;
-
-	if (len == 1)
-		sum += *(unsigned char *)buf;
-
-	sum = (sum >> 16) + (sum & 0xFFFF);
-	sum += (sum >> 16);
-	result = ~sum;
-
-	return result;
-}
 
 int main(int argc, char **argv)
 {
@@ -35,7 +16,7 @@ int main(int argc, char **argv)
 	ft_memset(&dest_addr, 0, sizeof(dest_addr));
 	dest_addr.sin_family = AF_INET;
 	dest_addr.sin_port = htons(33434);
-	int sockfd;
+	int udpfd, icmpfd = -1;
 	int ttl = 0;
 
 	// Hostname to IPv4
@@ -46,14 +27,30 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	ft_memcpy(&(dest_addr.sin_addr.s_addr), host->h_addr, host->h_length);
+	ft_memcpy(&(dest_addr.sin_addr), host->h_addr, host->h_length);
 
-	inet_pton(AF_INET, destination, &(dest_addr.sin_addr));
+	inet_pton(PF_INET, destination, &(dest_addr.sin_addr));
 
 	// Create a raw socket for UDP
-	if ((sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+	if ((udpfd = socket(PF_INET, SOCK_DGRAM, 0)) == -1)
 	{
 		perror("socket");
+		exit(EXIT_FAILURE);
+	}
+	icmpfd = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP);
+	if (icmpfd < 0)
+	{
+		icmpfd = socket(PF_INET, SOCK_DGRAM, IPPROTO_ICMP);
+		if (icmpfd < 0)
+		{
+			perror("socket");
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	if (setsockopt(icmpfd, IPPROTO_IP, IP_HDRINCL, &(int){1}, sizeof(int)) < 0)
+	{
+		perror("setsockopt");
 		exit(EXIT_FAILURE);
 	}
 
@@ -63,71 +60,101 @@ int main(int argc, char **argv)
 	{
 
 		// Set the TTL for the socket
-		setsockopt(sockfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(int));
-
-		// Create the UDP header
-
-		// Create the IP header
-		// struct iphdr ip_header;
+		if (setsockopt(udpfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(int)))
+		{
+			perror("setsockopt");
+			exit(EXIT_FAILURE);
+		}
 
 		// Send the packet
+		printf("%c%d ", (ttl < 10) ? ' ' : '\0', ttl);
 		struct timeval start[3], end[3];
+		struct sockaddr_in last_addr;
 		for (int i = 0; i < 3; i++)
 		{
 			// Get the current time
 			gettimeofday(&start[i], NULL);
 
 			// Send the packet
-			char packet[PACKET_SIZE / 2 - 2];
-			ft_memset(packet, 0, PACKET_SIZE / 2 - 2);
-			if (sendto(sockfd, packet, sizeof(packet), 0, (struct sockaddr*)&dest_addr, sizeof(struct sockaddr)) == -1)
+			char data[] = "SUPERMAN";
+			dest_addr.sin_port = htons(33434 + i);
+			if (sendto(udpfd, data, sizeof(data), 0, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr)) == -1)
 			{
-				perror("sendto");
-				exit(EXIT_FAILURE);
+				if (errno != ECONNRESET)
+				{
+					perror("sendto");
+					exit(EXIT_FAILURE);
+				}
+				else
+					break;
 			}
-			printf("Sent packet of size %ld\n", sizeof(packet));
 
 			// Receive the packet
-			struct sockaddr_in recv_addr;
-			socklen_t recv_addr_len = sizeof(struct sockaddr_in);
-			char recv_buf[PACKET_SIZE];
-			ft_memset(recv_buf, 0, PACKET_SIZE);
-			printf("Waiting for packet...\n");
-			if (recvfrom(sockfd, recv_buf, sizeof(recv_buf), 0, (struct sockaddr*)&recv_addr, &recv_addr_len) == -1)
+			fd_set read_set;
+			struct timeval timeout;
+			timeout.tv_sec = 1; // 1 second timeout
+			timeout.tv_usec = 0;
+
+			FD_ZERO(&read_set);
+			FD_SET(icmpfd, &read_set);
+
+			int select_result = select(icmpfd + 1, &read_set, NULL, NULL, &timeout);
+
+			if (select_result == -1)
 			{
-				perror("recvfrom");
+				perror("select");
 				exit(EXIT_FAILURE);
 			}
-			printf("Received packet of size %ld\n", sizeof(recv_buf));
-			// Check if timeout
+			else if (select_result > 0)
+			{
+				// Data is available to read
+				if (FD_ISSET(icmpfd, &read_set))
+				{
+					// Receive the packet
+					char recv_buffer[PACKET_SIZE];
+					struct sockaddr_in recv_addr;
+					socklen_t addr_len = sizeof(recv_addr);
+					ssize_t recv_len = recvfrom(icmpfd, recv_buffer, sizeof(recv_buffer), 0, (struct sockaddr *)&recv_addr, &addr_len);
 
-			// Get the current time
-			gettimeofday(&end[i], NULL);
+					if (recv_len == -1)
+					{
+						if (errno == EHOSTUNREACH)
+						{
+							printf(" * (no response)");
+						}
+						else
+						{
+							perror("recvfrom");
+							exit(EXIT_FAILURE);
+						}
+					}
+
+					gettimeofday(&end[i], NULL);
+					char *host_name;
+					if ((host = gethostbyaddr(&(recv_addr.sin_addr), sizeof(struct in_addr), AF_INET)))
+						host_name = host->h_name;
+					else
+						host_name = inet_ntoa(recv_addr.sin_addr);
+					if (last_addr.sin_addr.s_addr == recv_addr.sin_addr.s_addr)
+						printf("%.3f ms ", (end[i].tv_sec - start[i].tv_sec) * 1000.0 + (end[i].tv_usec - start[i].tv_usec) / 1000.0);
+					else
+						printf("%s (%s)  %.3f ms ", host_name, inet_ntoa(recv_addr.sin_addr), (end[i].tv_sec - start[i].tv_sec) * 1000.0 + (end[i].tv_usec - start[i].tv_usec) / 1000.0);
+					last_addr = recv_addr;
+				}
+			}
+			else
+				printf("* ");
 		}
-
-		// Print the information about the hop
-		/*char *host_name;
-		if ((host = gethostbyaddr(&(recv_addr.sin_addr), sizeof(struct in_addr), AF_INET)))
-			host_name = host->h_name;
-
-		printf("%c%d %s (%s)  %.3f ms  %.3f ms  %.3f ms\n", (ttl < 10) ? ' ' : '\0', ttl, host_name, inet_ntoa(recv_addr.sin_addr), (end[0].tv_sec - start[0].tv_sec) * 1000.0 + (end[0].tv_usec - start[0].tv_usec) / 1000.0, (end[1].tv_sec - start[1].tv_sec) * 1000.0 + (end[1].tv_usec - start[1].tv_usec) / 1000.0, (end[2].tv_sec - start[2].tv_sec) * 1000.0 + (end[2].tv_usec - start[2].tv_usec) / 1000.0);
-		*/
-		// Check if the destination is reached
-		/*char dest_ip[INET_ADDRSTRLEN];
-		inet_ntop(AF_INET, &(ip_header->daddr), dest_ip, INET_ADDRSTRLEN);
-		printf("dest_addr: %s <-> ip_header: %s | %08x <-> %08x\n", inet_ntoa(dest_addr.sin_addr), dest_ip, dest_addr.sin_addr.s_addr, ip_header->daddr);
-		if (ip_header->daddr == dest_addr.sin_addr.s_addr) {
-			printf("Destination reached!\n");
-			break;
-		}*/
-
-		// Set the TTL for the next hop
-		setsockopt(sockfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(int));
+		printf("\n");
+		if (last_addr.sin_addr.s_addr == dest_addr.sin_addr.s_addr)
+		{
+			close(udpfd);
+			close(icmpfd);
+			exit(EXIT_SUCCESS);
+		}
 	}
 
-	// Close the socket
-	close(sockfd);
+	close(udpfd);
+	close(icmpfd);
 	return (0);
 }
-
-//  1  Pandeo.mshome.net (172.17.0.1)  0.180 ms  0.119 ms  0.086 ms

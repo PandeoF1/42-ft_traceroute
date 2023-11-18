@@ -4,3 +4,4 @@ objs
 *.a
 ft_traceroute
 .vscode
+test
