@@ -3,32 +3,48 @@
 #define MAX_HOPS 30
 #define PACKET_SIZE 68
 
+int help(void){
+	printf("Usage:\n  ft_traceroute host\n");
+	printf("Options:\n  --help\t\tRead this help and exit\n");
+	printf("Arguments:\n+    host\t\tThe host to trace the route to\n");
+	return (EXIT_SUCCESS);
+}
+
+int bad_option(char *option, int argc){
+	printf("Bad option `%s' (argc %d)\n", option, argc);
+	return (EXIT_FAILURE);
+}
+
 int main(int argc, char **argv)
 {
+	int udpfd, icmpfd = -1;
+	int ttl = 0;
+	char *destination = argv[1];
+	struct sockaddr_in dest_addr;
+	struct hostent *host;
+
+	for (int i = 1; i < argc; i++)
+		if (ft_strncmp(argv[i], "--help", 6) == 0)
+			return (help());
+		else if (argv[i][0] == '-')
+			return (bad_option(argv[i], i));
 	if (argc != 2)
-	{
-		printf("Usage: %s <hostname>\n", argv[0]);
-		return (1);
-	}
+		return (help());
 	if (getuid() != 0)
 	{
 		printf("ft_traceroute: Lacking privilege for icmp socket.\n");
 		return (1);
 	}
 
-	char *destination = argv[1];
-	struct sockaddr_in dest_addr;
+
 	ft_memset(&dest_addr, 0, sizeof(dest_addr));
 	dest_addr.sin_family = AF_INET;
 	dest_addr.sin_port = htons(33434);
-	int udpfd, icmpfd = -1;
-	int ttl = 0;
 
 	// Hostname to IPv4
-	struct hostent *host;
 	if ((host = gethostbyname(destination)) == NULL)
 	{
-		perror("gethostbyname");
+		printf("ft_traceroute: %s: Name or service not known\n", destination);
 		exit(EXIT_FAILURE);
 	}
 
@@ -36,8 +52,7 @@ int main(int argc, char **argv)
 
 	inet_pton(PF_INET, destination, &(dest_addr.sin_addr));
 
-	// Create a raw socket for UDP
-	if ((udpfd = socket(PF_INET, SOCK_DGRAM, 0)) == -1)
+	if ((udpfd = socket(PF_INET, SOCK_DGRAM, 0)) == -1) // Create the UDP socket
 	{
 		perror("socket");
 		exit(EXIT_FAILURE);
@@ -65,27 +80,27 @@ int main(int argc, char **argv)
 
 	while (ttl++ < MAX_HOPS)
 	{
-		// Set the TTL for the socket
-		if (setsockopt(udpfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(int)))
+		struct timeval start[3], end[3];
+		struct sockaddr_in last_addr;
+
+		ft_memset(&last_addr, 0, sizeof(last_addr));
+
+		if (setsockopt(udpfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(int))) // Set the TTL
 		{
 			perror("setsockopt");
 			exit(EXIT_FAILURE);
 		}
 
-		// Send the packet
 		printf("%c%d ", (ttl < 10) ? ' ' : '\0', ttl);
-		struct timeval start[3], end[3];
-		struct sockaddr_in last_addr;
-		ft_memset(&last_addr, 0, sizeof(last_addr));
-		for (int i = 0; i < 3; i++)
+		for (int i = 0; i < 3; i++) // Send the packet 3 times
 		{
-			// Get the current time
-			gettimeofday(&start[i], NULL);
-
-			// Send the packet
+			fd_set read_set;
+			struct timeval timeout;
 			char data[PACKET_SIZE];
+
 			ft_memset(data, 0, sizeof(data));
-			dest_addr.sin_port = htons(33434 + i);
+			gettimeofday(&start[i], NULL);
+			dest_addr.sin_port = htons(33434 + ttl + i);
 			if (sendto(udpfd, data, sizeof(data), 0, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr)) == -1)
 			{
 				if (errno != ECONNRESET)
@@ -96,17 +111,13 @@ int main(int argc, char **argv)
 				else
 					break;
 			}
-
-			// Receive the packet
-			fd_set read_set;
-			struct timeval timeout;
-			timeout.tv_sec = 1; // 1 second timeout
+			timeout.tv_sec = 1;
 			timeout.tv_usec = 0;
 
 			FD_ZERO(&read_set);
 			FD_SET(icmpfd, &read_set);
 
-			int select_result = select(icmpfd + 1, &read_set, NULL, NULL, &timeout);
+			int select_result = select(icmpfd + 1, &read_set, NULL, NULL, &timeout); // Wait for the response
 
 			if (select_result == -1)
 			{
@@ -115,14 +126,13 @@ int main(int argc, char **argv)
 			}
 			else if (select_result > 0)
 			{
-				// Data is available to read
-				if (FD_ISSET(icmpfd, &read_set))
+				if (FD_ISSET(icmpfd, &read_set)) // If available to read
 				{
-					// Receive the packet
 					char recv_buffer[PACKET_SIZE];
 					struct sockaddr_in recv_addr;
 					socklen_t addr_len = sizeof(recv_addr);
 					ssize_t recv_len = recvfrom(icmpfd, recv_buffer, sizeof(recv_buffer), 0, (struct sockaddr *)&recv_addr, &addr_len);
+					char *host_name;
 
 					if (recv_len == -1)
 					{
@@ -136,7 +146,6 @@ int main(int argc, char **argv)
 					}
 
 					gettimeofday(&end[i], NULL);
-					char *host_name;
 					if ((host = gethostbyaddr(&(recv_addr.sin_addr), sizeof(struct in_addr), AF_INET)))
 						host_name = host->h_name;
 					else
