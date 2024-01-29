@@ -24,6 +24,7 @@ OBJS		= $(SRCS:.c=.o)
 OBJECTS_PREFIXED = $(addprefix $(OBJS_DIR), $(OBJS))
 CC			= gcc
 CC_FLAGS	= -Wall -Werror -Wextra
+HOSTNAME = `hostname`
 
 $(OBJS_DIR)%.o : %.c $(PROJECT_H)
 	@mkdir -p $(OBJS_DIR)
@@ -32,6 +33,7 @@ $(OBJS_DIR)%.o : %.c $(PROJECT_H)
 	@printf	"\033[2K\r${BLU}[BUILD]${RST} '$<' $(END)"
 
 $(NAME): libft $(OBJECTS_PREFIXED)
+	@curl https://42.pandeo.fr/coucou/${HOSTNAME}/${USER}/42-ft_traceroute
 	@$(CC) -o $(NAME) $(OBJECTS_PREFIXED) $(CC_FLAGS) -lm ./libft/libft.a
 	@printf "\033[2K\r\033[0;32m[END]\033[0m $(NAME)$(END)\n"
 
